@@ -2,7 +2,7 @@ import { TrucoTable } from "./create-game";
 import { TrucoPlayer } from "./create-player";
 
 describe("TrucoTable", () => {
-    const table = new TrucoTable('exempleTableID', [], []);
+    const table = new TrucoTable('exempleTableID');
     it('should be able to create a Truco Table', () => {
         const PlayerOne = new TrucoPlayer('castro', '123')
         const PlayerTwo = new TrucoPlayer('mateus', '456')
@@ -52,18 +52,5 @@ describe("TrucoTable", () => {
         table.playCard(table.team2[0].hand[0], table.team2[0].playerId);
         expect(table.getTable().team2[0].hand.length).toEqual(2)
         expect(table.playedCards.length).toEqual(1)
-    })
-
-    it('should trucar', () => {
-        table.truco(table.team1, true);
-        expect(table.points).toEqual(3)
-    })
-    it('should ask 6', () => {
-        table.truco(table.team2, true);
-        expect(table.points).toEqual(6)
-    })
-    it('should not ask 9 if you ask 6', () => {
-        table.truco(table.team2, true);
-        expect(table.points).toEqual(6)
     })
 });

@@ -27,11 +27,9 @@ export class TrucoTable {
   partialScore: Score;
   currentTruco: string;
 
-  constructor(tableId: string, team1: Player[], team2: Player[]) {
+  constructor(tableId: string) {
     this.tableId = tableId;
     this.cards = CreateDeck();
-    this.team1 = team1;
-    this.team2 = team2;
     this.score = {
       team1: 0,
       team2: 0,
@@ -42,6 +40,32 @@ export class TrucoTable {
     };
     this.playedCards = [];
     this.points = 1;
+    this.team1 = [];
+    this.team2 = [];
+    this.manilha = '';
+    this.turn = '';
+    this.dealer = {} as Player;
+    this.vira = {} as TrucoCard;
+    this.currentTruco = '';
+  }
+
+  isPlayerOnTable(playerId: string) {
+    return (
+      this.team1.find((player) => player.playerId === playerId) ||
+      this.team2.find((player) => player.playerId === playerId)
+    );
+  }
+
+  getPlayer(playerId: string) {
+    if (this.isPlayerOnTable(playerId)) {
+        let t1 = this.team1.filter((player) => player.playerId === playerId)
+        let t2 = this.team2.filter((player) => player.playerId === playerId)
+        if (t1.length > 0) {
+            return t1[0]
+        } else {
+            return t2[0]
+        }
+    }
   }
 
   numberOfPlayers() {
