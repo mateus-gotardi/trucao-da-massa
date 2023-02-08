@@ -10,4 +10,8 @@ export class GameGateway {
   onNewMessage(@MessageBody() body: any) {
     return { event: 'join', data: body };
   }
+  @SubscribeMessage('create-room')
+  onCreateRoom(@MessageBody() body: any) {
+    return { event: 'create-room', data: body };
+  }
 }
