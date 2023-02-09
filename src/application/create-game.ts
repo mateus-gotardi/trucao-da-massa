@@ -26,6 +26,8 @@ export class TrucoTable {
   points: number;
   partialScore: Score;
   currentTruco: string;
+  isGameStarted: boolean;
+  isGameFinished: boolean;
 
   constructor(tableId: string) {
     this.tableId = tableId;
@@ -47,6 +49,8 @@ export class TrucoTable {
     this.dealer = {} as Player;
     this.vira = {} as TrucoCard;
     this.currentTruco = '';
+    this.isGameStarted = false;
+    this.isGameFinished = false;
   }
 
   isPlayerOnTable(playerId: string) {
@@ -58,24 +62,46 @@ export class TrucoTable {
 
   getPlayer(playerId: string) {
     if (this.isPlayerOnTable(playerId)) {
-        let t1 = this.team1.filter((player) => player.playerId === playerId)
-        let t2 = this.team2.filter((player) => player.playerId === playerId)
-        if (t1.length > 0) {
-            return t1[0]
-        } else {
-            return t2[0]
-        }
+      if (this.getTeam(playerId) === 'team1') {
+        return this.team1.filter((player) => player.playerId === playerId)[0];
+      } else {
+        return this.team2.filter((player) => player.playerId === playerId)[0];
+      }
+    }
+  }
+
+  changeTeam(playerId: string) {
+    if (!this.isGameStarted && this.isPlayerOnTable(playerId)) {
+      let player = this.getPlayer(playerId);
+      if (this.getTeam(playerId) === 'team1') {
+        this.team1 = this.team1.filter((plyr) => plyr.playerId !== playerId);
+        this.team2.push(player);
+      } else {
+        this.team2 = this.team2.filter((plyr) => plyr.playerId !== playerId);
+        this.team1.push(player);
+      }
     }
   }
 
   numberOfPlayers() {
     return this.team1.length + this.team2.length;
   }
+
   startGame() {
     this.dealer = this.team1[0];
     this.dealCards();
     this.turn = this.team2[0].playerId;
+    this.isGameStarted = true;
   }
+
+  isReadyToStart() {
+    return (
+      this.team1.length === this.team2.length &&
+      this.team1.length >= 1 &&
+      this.team1.length <= 3
+    );
+  }
+
   addPlayer(player: Player, team: number) {
     if (team === 1) {
       this.team1.push(player);
@@ -202,12 +228,17 @@ export class TrucoTable {
     }
   }
 
-  endHand() {
-    if (this.partialScore.team1 > this.partialScore.team2) {
-      this.score.team1 += this.points;
-    } else if (this.partialScore.team2 > this.partialScore.team1) {
-      this.score.team2 += this.points;
+  endHand(refusedTruco?: boolean) {
+    if (refusedTruco) {
+      this.score[this.getTeam(this.currentTruco)] += this.points;
+    } else {
+      if (this.partialScore.team1 > this.partialScore.team2) {
+        this.score.team1 += this.points;
+      } else if (this.partialScore.team2 > this.partialScore.team1) {
+        this.score.team2 += this.points;
+      }
     }
+
     this.partialScore = {
       team1: 0,
       team2: 0,
@@ -225,22 +256,11 @@ export class TrucoTable {
   }
 
   endGame() {
-    this.score = {
-      team1: 0,
-      team2: 0,
-    };
-    this.partialScore = {
-      team1: 0,
-      team2: 0,
-    };
-    this.points = 1;
-    this.switchDealer();
-    this.turn = this.dealer.playerId;
-    this.switchTurn();
-    this.cards = CreateDeck();
+    this.isGameFinished = true;
   }
 
   truco(playerId: string, accepted: boolean) {
+    //playerId do player que pediu o truco
     if (this.currentTruco !== playerId && accepted) {
       switch (this.points) {
         case 1:
@@ -258,7 +278,7 @@ export class TrucoTable {
       }
       this.currentTruco = playerId;
     } else if (!accepted) {
-      this.endHand();
+      this.endHand(true);
     } else {
       return;
     }
@@ -395,6 +415,16 @@ export class TrucoTable {
       }
     });
     return winner;
+  }
+
+  getTeam(playerId: string) {
+    if (this.isPlayerOnTable(playerId)) {
+      if (this.team1.find((p) => p.playerId === playerId)) {
+        return 'team1';
+      } else {
+        return 'team2';
+      }
+    }
   }
 
   getTable() {

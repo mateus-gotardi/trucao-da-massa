@@ -115,4 +115,60 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   onGetRooms() {
     return { event: 'getrooms', data: rooms };
   }
+
+  @SubscribeMessage('changeteam')
+  onChangeTeam(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+    },
+  ) {
+    rooms[body.roomId].changeTeam(body.playerId);
+    this.updateRoom(body.roomId);
+  }
+
+  @SubscribeMessage('startgame')
+  onStartGame(
+    @MessageBody()
+    body: {
+      roomId: string;
+    },
+  ) {
+    if (
+      !rooms[body.roomId].isGameStarted &&
+      rooms[body.roomId].isReadyToStart()
+    ) {
+      rooms[body.roomId].startGame();
+      this.updateRoom(body.roomId);
+    }
+  }
+
+  @SubscribeMessage('asktruco')
+  onAskTruco(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+    },
+  ) {
+    if (rooms[body.roomId].getTeam(body.playerId) === 'team1') {
+      this.server.to(body.roomId).emit('acceptTruco', 'team2');
+    } else if (rooms[body.roomId].getTeam(body.playerId) === 'team2') {
+      this.server.to(body.roomId).emit('acceptTruco', 'team1');
+    }
+  }
+
+  @SubscribeMessage('responsetruco')
+  onResponseTruco(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+      accepted: boolean;
+    },
+  ) {
+    rooms[body.roomId].truco(body.playerId, body.accepted);
+    this.updateRoom(body.roomId);
+  }
 }
