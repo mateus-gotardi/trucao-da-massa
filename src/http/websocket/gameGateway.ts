@@ -128,6 +128,18 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.updateRoom(body.roomId);
   }
 
+  @SubscribeMessage('setready')
+  onSetReady(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+    },
+  ) {
+    rooms[body.roomId].setReady(body.playerId);
+    this.updateRoom(body.roomId);
+  }
+
   @SubscribeMessage('startgame')
   onStartGame(
     @MessageBody()
@@ -171,4 +183,18 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     rooms[body.roomId].truco(body.playerId, body.accepted);
     this.updateRoom(body.roomId);
   }
+
+  @SubscribeMessage('playcard')
+  onPlayCard(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+      card: string;
+    },
+  ) {
+    rooms[body.roomId].playCard(body.card, body.playerId);
+    this.updateRoom(body.roomId);
+  }
+
 }

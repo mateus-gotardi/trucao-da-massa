@@ -53,6 +53,8 @@ export class TrucoTable {
     this.isGameFinished = false;
   }
 
+
+
   isPlayerOnTable(playerId: string) {
     return (
       this.team1.find((player) => player.playerId === playerId) ||
@@ -87,11 +89,21 @@ export class TrucoTable {
     return this.team1.length + this.team2.length;
   }
 
+  checkReady() {
+    return (
+      this.team1.filter((player) => player.ready).length === this.team1.length &&
+      this.team2.filter((player) => player.ready).length === this.team2.length
+    );
+  }
+
   startGame() {
-    this.dealer = this.team1[0];
-    this.dealCards();
-    this.turn = this.team2[0].playerId;
-    this.isGameStarted = true;
+    if (this.checkReady() && this.isReadyToStart()) {
+      this.dealer = this.team1[0];
+      this.dealCards();
+      this.turn = this.team2[0].playerId;
+      this.isGameStarted = true;
+    }
+
   }
 
   isReadyToStart() {
@@ -147,24 +159,22 @@ export class TrucoTable {
   playCard(card: TrucoCard, playerId: string) {
     console.log(
       'player: ' +
-        playerId +
-        ' turn: ' +
-        this.turn +
-        ' card: ' +
-        card.value +
-        ' ' +
-        card.suit,
+      playerId +
+      ' turn: ' +
+      this.turn +
+      ' card: ' +
+      card.value +
+      ' ' +
+      card.suit,
     );
     if (this.turn === playerId) {
-      this.playedCards.push({ card: card, playerId: this.turn });
-      this.team1.forEach((player) => {
+      let team = this.getTeam(playerId);
+      this[team].forEach((player) => {
         if (player.playerId === playerId) {
-          player.hand = player.hand.filter((handCard) => handCard != card);
-        }
-      });
-      this.team2.forEach((player) => {
-        if (player.playerId === playerId) {
-          player.hand = player.hand.filter((handCard) => handCard != card);
+          if (player.hand.find((handCard) => handCard === card)) {
+            this.playedCards.push({ card: card, playerId: this.turn });
+            player.hand = player.hand.filter((handCard) => handCard != card);
+          } else return 'Card not in hand';
         }
       });
       this.switchTurn();
@@ -198,9 +208,9 @@ export class TrucoTable {
       this.partialScore.team1 === 0 &&
       this.partialScore.team2 === 0 &&
       this.team1.filter((player) => player.hand.length === 1).length ===
-        this.team1.length &&
+      this.team1.length &&
       this.team2.filter((player) => player.hand.length === 1).length ===
-        this.team2.length
+      this.team2.length
     ) {
       if (
         this.team1.filter((player) => player.playerId === winner.playerId)
@@ -222,7 +232,7 @@ export class TrucoTable {
       (this.team1.filter((player) => player.hand.length === 0).length ===
         this.team1.length &&
         this.team2.filter((player) => player.hand.length === 0).length ===
-          this.team2.length)
+        this.team2.length)
     ) {
       this.endHand();
     }
@@ -415,6 +425,13 @@ export class TrucoTable {
       }
     });
     return winner;
+  }
+
+  setReady(playerId: string) {
+    if (this.isPlayerOnTable(playerId)) {
+      this.team1.find((p) => p.playerId === playerId).ready = true;
+      this.team2.find((p) => p.playerId === playerId).ready = true;
+    }
   }
 
   getTeam(playerId: string) {
