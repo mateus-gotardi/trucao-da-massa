@@ -2,7 +2,7 @@ import { TrucoTable } from "./create-game";
 import { TrucoPlayer } from "./create-player";
 
 describe("TrucoTable", () => {
-    const table = new TrucoTable('exempleTableID');
+    const table = new TrucoTable('exempleTableID', 'testUser');
     it('should be able to create a Truco Table', () => {
         const PlayerOne = new TrucoPlayer('castro', '123')
         const PlayerTwo = new TrucoPlayer('mateus', '456')

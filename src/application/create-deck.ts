@@ -6,7 +6,7 @@ export interface TrucoCard {
 
 const CreateDeck = (): TrucoCard[] => {
     const deck = [];
-    const suits = ["ouros", "espada", "copas", "paus" ];
+    const suits = ["ouros", "espadas", "copas", "paus" ];
     const values = "4,5,6,7,Q,J,K,A,2,3";
 
     for (let value of values.split(",")) {
