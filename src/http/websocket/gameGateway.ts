@@ -23,6 +23,29 @@ const gameExists = (roomId: string) => {
     return false;
   }
 }
+const getNextPlayer = (playerId: string, roomId: string) => {
+  if (rooms[roomId].team1[0].playerId === playerId) {
+    return rooms[roomId].team2[0].playerId;
+  } else if (rooms[roomId].team2[0].playerId === playerId) {
+    return rooms[roomId].team1[1].playerId;
+  } else if (rooms[roomId].team1[1].playerId === playerId) {
+    return rooms[roomId].team2[1].playerId;
+  } else if (rooms[roomId].team2[1].playerId === playerId) {
+    return rooms[roomId].team1[0].playerId;
+  }
+}
+
+const getPartner = (playerId: string, roomId: string) => {
+  if (rooms[roomId].team1[0].playerId === playerId) {
+    return rooms[roomId].team1[1].playerId;
+  } else if (rooms[roomId].team1[1].playerId === playerId) {
+    return rooms[roomId].team1[0].playerId;
+  } else if (rooms[roomId].team2[0].playerId === playerId) {
+    return rooms[roomId].team2[1].playerId;
+  } else if (rooms[roomId].team2[1].playerId === playerId) {
+    return rooms[roomId].team2[0].playerId;
+  }
+}
 @WebSocketGateway()
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
@@ -60,6 +83,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           rooms[body.roomId].addPlayer(player, body.team);
           let table = rooms[body.roomId].getTable();
           client.join(body.roomId);
+          client.join(body.playerId);
           this.updateRoom(body.roomId);
           return { event: 'join', data: { table, player, team: `team${body.team}` } };
         } else {
@@ -90,6 +114,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       rooms[body.roomId].addPlayer(player, body.team);
       let table = rooms[body.roomId].getTable();
       client.join(body.roomId);
+      client.join(body.playerId);
       return { event: 'join', data: { table, player, team: `team${body.team}` } };
     } else {
       return { event: 'error-create', data: 'Sala já existe' };
@@ -204,27 +229,69 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       playerId: string;
     },
   ) {
-    if (gameExists(body.roomId) && rooms[body.roomId].getTeam(body.playerId) === 'team1') {
-      this.server.to(body.roomId).emit('acceptTruco', 'team2');
-    } else if (gameExists(body.roomId) && rooms[body.roomId].getTeam(body.playerId) === 'team2') {
-      this.server.to(body.roomId).emit('acceptTruco', 'team1');
+    if (gameExists(body.roomId) && rooms[body.roomId].turn === body.playerId &&
+      rooms[body.roomId].currentTruco !== body.playerId) {
+      let playerToAccept = getNextPlayer(body.playerId, body.roomId);
+      switch (rooms[body.roomId].getTeam(body.playerId)) {
+        case 'team1':
+          this.server.to(body.roomId).emit('acceptTruco', { team: 'team2', player: playerToAccept, asker: body.playerId });
+          break;
+        case 'team2':
+          this.server.to(body.roomId).emit('acceptTruco', { team: 'team1', player: playerToAccept, asker: body.playerId });
+          break;
+      }
     }
   }
 
   @SubscribeMessage('responsetruco')
-  onResponseTruco(
+  async onResponseTruco(
     @MessageBody()
     body: {
       roomId: string;
       playerId: string;
       accepted: boolean;
+      asker: string;
     },
   ) {
     if (gameExists(body.roomId)) {
-      rooms[body.roomId].truco(body.playerId, body.accepted);
+      await rooms[body.roomId].truco(body.asker, body.accepted);
       this.updateRoom(body.roomId);
     }
+  }
 
+  @SubscribeMessage('askmoretruco')
+  async onAskMoreTruco(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+      previousAsker: string;
+    },
+  ) {
+    if (gameExists(body.roomId)) {
+      await rooms[body.roomId].truco(body.previousAsker, true);
+      this.updateRoom(body.roomId);
+      switch (rooms[body.roomId].getTeam(body.playerId)) {
+        case 'team1':
+          this.server.to(body.roomId).emit('acceptTruco', { team: 'team2', player: body.previousAsker, asker: body.playerId });
+          break;
+        case 'team2':
+          this.server.to(body.roomId).emit('acceptTruco', { team: 'team1', player: body.previousAsker, asker: body.playerId });
+          break;
+      }
+    }
+  }
+
+  @SubscribeMessage('helpfriend')
+  onHelpFriend(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+      accept: "yes" | "no" | "bet";
+    },
+  ) {
+    this.server.to(getPartner(body.playerId, body.roomId)).emit('helpfriend', { accept: body.accept });
   }
 
   @SubscribeMessage('playcard')
@@ -236,9 +303,19 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       card: TrucoCard;
     },
   ) {
-    if (gameExists(body.roomId)) {
-      await rooms[body.roomId].playCard(body.card, body.playerId);
-      this.updateRoom(body.roomId);
+    if (gameExists(body.roomId) && !rooms[body.roomId].waiting) {
+      if (rooms[body.roomId].playedCards.length !== rooms[body.roomId].numberOfPlayers()) {
+        await rooms[body.roomId].playCard(body.card, body.playerId);
+        this.updateRoom(body.roomId);
+      }
+      if (rooms[body.roomId].playedCards.length === rooms[body.roomId].numberOfPlayers()) {
+        rooms[body.roomId].waiting = true;
+        setTimeout(async () => {
+          await rooms[body.roomId].endPartial();
+          this.updateRoom(body.roomId);
+          rooms[body.roomId].waiting = false;
+        }, 3000);
+      }
     }
   }
 

@@ -29,6 +29,7 @@ export class TrucoTable {
   gameStarted: boolean;
   gameFinished: boolean;
   createdBy: string;
+  waiting: boolean;
 
   constructor(tableId: string, playerId: string) {
     this.tableId = tableId;
@@ -53,6 +54,7 @@ export class TrucoTable {
     this.gameStarted = false;
     this.gameFinished = false;
     this.createdBy = playerId;
+    this.waiting = false;
   }
 
 
@@ -173,23 +175,19 @@ export class TrucoTable {
       ' ' +
       card.suit,
     );
-    if (this.turn === playerId) {
+    if (this.turn === playerId && this.playedCards.length < 4 && !this.waiting) {
       let player = this.getPlayer(playerId);
       if (player.hand.some((handCard) => handCard.value === card.value &&
         handCard.suit === card.suit)) {
         for (let i = 0; i < player.hand.length; i++) {
           if (player.hand[i].value === card.value && player.hand[i].suit === card.suit) {
             player.hand.splice(i, 1);
+            this.playedCards.push({ card: card, playerId: playerId });
+            this.switchTurn();
             break;
           }
         }
-        this.playedCards.push({ card: card, playerId: playerId });
-        this.switchTurn();
       } else return 'Card not in hand';
-
-      if (this.playedCards.length === this.numberOfPlayers()) {
-        await this.endPartial();
-      }
     } else return 'Not your turn';
   }
 
@@ -202,7 +200,6 @@ export class TrucoTable {
       this.setTurn(this.dealer.playerId);
       this.switchTurn();
     } else {
-      this.setTurn(winner.playerId);
       if (
         this.team1.filter((player) => player.playerId === winner.playerId)
           .length > 0
@@ -218,18 +215,48 @@ export class TrucoTable {
       //rare case when draw all hands
       await this.endHand();
     } else if (
-      this.partialScore.team1 >= 2 && this.partialScore.team1 > this.partialScore.team2 ||
-      this.partialScore.team2 >= 2 && this.partialScore.team2 > this.partialScore.team1 ||
-      (this.team1.filter((player) => player.hand.length === 0).length ===
-        this.team1.length &&
-        this.team2.filter((player) => player.hand.length === 0).length ===
-        this.team2.length)
+      this.partialScore.team1 >= 2 &&
+      this.partialScore.team1 > this.partialScore.team2 ||
+      this.partialScore.team2 >= 2 &&
+      this.partialScore.team2 > this.partialScore.team1 ||
+      this.team1.filter((player) => player.hand.length === 0).length ===
+      this.team1.length &&
+      this.team2.filter((player) => player.hand.length === 0).length ===
+      this.team2.length
     ) {
       await this.endHand();
+    } else if (winner.playerId !== '') {
+      this.setTurn(winner.playerId);
     }
   }
 
+  async reDeal() {
+    this.currentTruco = '';
+    this.playedCards = [];
+    this.partialScore.team1 = 0;
+    this.partialScore.team2 = 0;
+    this.switchDealer();
+    this.turn = this.dealer.playerId;
+    this.switchTurn();
+    this.cards = CreateDeck();
+    const resetHands = async () => {
+      this.team1.forEach((player) => {
+        player.hand = [];
+      });
+      this.team2.forEach((player) => {
+        player.hand = [];
+      });
+    }
+    await resetHands();
+    await this.dealCards();
+    this.points = 1;
+  }
+
   async endHand(refusedTruco?: boolean) {
+    console.log('endHand')
+    console.log(this.partialScore)
+    console.log(this.score)
+
     if (refusedTruco) {
       this.score[this.getTeam(this.currentTruco)] += this.points;
     } else {
@@ -239,33 +266,13 @@ export class TrucoTable {
         this.score.team2 += this.points;
       }
     }
-
-    this.partialScore = {
-      team1: 0,
-      team2: 0,
-    };
     if (this.score.team1 >= 12 || this.score.team2 >= 12) {
       this.endGame();
     } else {
-      this.points = 1;
-      this.switchDealer();
-      this.turn = this.dealer.playerId;
-      this.switchTurn();
-      this.cards = CreateDeck();
-      const resetHands = async() => {
-        this.team1.forEach((player) => {
-          player.hand = [];
-        });
-        this.team2.forEach((player) => {
-          player.hand = [];
-        });
-      }
-      console.log(this.team1)
-      console.log(this.team2)
-      await resetHands();
-      await this.dealCards();
-      console.log(this.team1)
-      console.log(this.team2)
+
+      console.log(this.partialScore)
+      console.log(this.score)
+      await this.reDeal()
     }
   }
 
@@ -273,9 +280,11 @@ export class TrucoTable {
     this.gameFinished = true;
   }
 
-  truco(playerId: string, accepted: boolean) {
+  async truco(playerId: string, accepted: boolean) {
     //playerId do player que pediu o truco
-    if (this.currentTruco !== playerId && accepted) {
+    console.log(playerId, accepted)
+    this.currentTruco = playerId;
+    if (accepted) {
       switch (this.points) {
         case 1:
           this.points = 3;
@@ -290,9 +299,8 @@ export class TrucoTable {
           this.points = 12;
           break;
       }
-      this.currentTruco = playerId;
     } else if (!accepted) {
-      this.endHand(true);
+      await this.endHand(true);
     } else {
       return;
     }
