@@ -130,8 +130,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody()
     body: {
       roomId: string;
-      name: string;
-      team: number;
       playerId: string;
     }
   ) {
