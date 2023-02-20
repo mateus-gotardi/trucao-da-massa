@@ -63,6 +63,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   updateRoom(roomId: string) {
     this.server.to(roomId).emit('update', rooms[roomId].getTable());
+    if (rooms[roomId].elevenHand && rooms[roomId].elevenAccept.length === 0) {
+      let team = rooms[roomId].score.team1 === 11 ? 'team1' : 'team2';
+      this.server.to(roomId).emit('handofeleven', { team: team });
+    }
   }
 
   @SubscribeMessage('join')
@@ -222,7 +226,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('asktruco')
-  onAskTruco(
+  async onAskTruco(
     @MessageBody()
     body: {
       roomId: string;
@@ -230,7 +234,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
   ) {
     if (gameExists(body.roomId) && rooms[body.roomId].turn === body.playerId &&
-      rooms[body.roomId].currentTruco !== body.playerId) {
+      rooms[body.roomId].currentTruco !== body.playerId && !rooms[body.roomId].elevenHand) {
+      rooms[body.roomId].waiting = true;
       let playerToAccept = getNextPlayer(body.playerId, body.roomId);
       switch (rooms[body.roomId].getTeam(body.playerId)) {
         case 'team1':
@@ -240,6 +245,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           this.server.to(body.roomId).emit('acceptTruco', { team: 'team1', player: playerToAccept, asker: body.playerId });
           break;
       }
+    } else if (rooms[body.roomId].elevenHand) {
+      let team = rooms[body.roomId].getTeam(body.playerId) === 'team1' ? 'team2' : 'team1';
+      rooms[body.roomId].score[team] = 12;
+      await rooms[body.roomId].endHand();
+      this.updateRoom(body.roomId);
     }
   }
 
@@ -255,7 +265,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     if (gameExists(body.roomId)) {
       await rooms[body.roomId].truco(body.asker, body.accepted);
+      rooms[body.roomId].waiting = false;
       this.updateRoom(body.roomId);
+      this.server.to(body.roomId).emit('responsetruco', { team: rooms[body.roomId].getTeam(body.playerId), accept: body.accepted });
     }
   }
 
@@ -313,10 +325,37 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         setTimeout(async () => {
           await rooms[body.roomId].endPartial();
           this.updateRoom(body.roomId);
-          rooms[body.roomId].waiting = false;
+          if (!rooms[body.roomId].elevenHand) {
+            rooms[body.roomId].waiting = false;
+          }
         }, 3000);
       }
     }
   }
 
+  @SubscribeMessage('playeleven')
+  async onPlayEleven(
+    @MessageBody()
+    body: {
+      roomId: string;
+      team: string;
+      accept: boolean;
+    },
+  ) {
+    if (gameExists(body.roomId) && rooms[body.roomId].score[body.team] === 11) {
+      rooms[body.roomId].elevenAccept.push(body.accept)
+      if (body.accept) {
+        rooms[body.roomId].points = 3;
+        rooms[body.roomId].waiting = false;
+        this.server.to(body.roomId).emit('playelevenres', { message: "Mão de onze aceita" });
+      } else if (rooms[body.roomId].elevenAccept.length === 2 && !rooms[body.roomId].elevenAccept.includes(true)) {
+        let team = body.team === 'team1' ? 'team2' : 'team1';
+        rooms[body.roomId].score[team] += 1;
+        await rooms[body.roomId].reDeal();
+        this.server.to(body.roomId).emit('playelevenres', { message: "Mão de onze recusada" });
+      }
+      this.server.to(body.roomId).emit('playeleven', { team: body.team, accept: body.accept });
+      this.updateRoom(body.roomId);
+    }
+  }
 }

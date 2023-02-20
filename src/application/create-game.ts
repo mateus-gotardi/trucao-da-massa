@@ -30,6 +30,10 @@ export class TrucoTable {
   gameFinished: boolean;
   createdBy: string;
   waiting: boolean;
+  elevenHand: boolean;
+  winner: string;
+  goldHand: boolean;
+  elevenAccept: boolean[];
 
   constructor(tableId: string, playerId: string) {
     this.tableId = tableId;
@@ -54,7 +58,10 @@ export class TrucoTable {
     this.gameStarted = false;
     this.gameFinished = false;
     this.createdBy = playerId;
-    this.waiting = false;
+    this.waiting = true;
+    this.elevenHand = false;
+    this.goldHand = false;
+    this.winner = '';
   }
 
 
@@ -104,8 +111,15 @@ export class TrucoTable {
     if (this.checkReady() && this.isReadyToStart()) {
       this.dealer = this.team1[0];
       this.dealCards();
+      this.score.team1 = 0;
+      this.score.team2 = 0;
+      this.partialScore.team1 = 0;
+      this.partialScore.team2 = 0;
       this.turn = this.team2[0].playerId;
       this.gameStarted = true;
+      this.gameFinished = false;
+      this.winner = '';
+      this.waiting = false;
     }
 
   }
@@ -200,6 +214,7 @@ export class TrucoTable {
       this.setTurn(this.dealer.playerId);
       this.switchTurn();
     } else {
+      this.setTurn(winner.playerId);
       if (
         this.team1.filter((player) => player.playerId === winner.playerId)
           .length > 0
@@ -225,8 +240,6 @@ export class TrucoTable {
       this.team2.length
     ) {
       await this.endHand();
-    } else if (winner.playerId !== '') {
-      this.setTurn(winner.playerId);
     }
   }
 
@@ -250,12 +263,20 @@ export class TrucoTable {
     await resetHands();
     await this.dealCards();
     this.points = 1;
+    this.elevenHand = false;
+    if (this.score.team1 === 11 && this.score.team2 === 11) {
+      this.goldHand = true;
+      this.elevenHand = false;
+      this.waiting = false;
+    }else if (this.score.team1 === 11 || this.score.team2 === 11) {
+      this.elevenHand = true;
+      this.waiting = true;
+      this.elevenAccept = []
+    }
   }
 
   async endHand(refusedTruco?: boolean) {
     console.log('endHand')
-    console.log(this.partialScore)
-    console.log(this.score)
 
     if (refusedTruco) {
       this.score[this.getTeam(this.currentTruco)] += this.points;
@@ -267,17 +288,27 @@ export class TrucoTable {
       }
     }
     if (this.score.team1 >= 12 || this.score.team2 >= 12) {
-      this.endGame();
+      await this.endGame();
     } else {
-
       console.log(this.partialScore)
       console.log(this.score)
       await this.reDeal()
     }
   }
 
-  endGame() {
+  async endGame() {
     this.gameFinished = true;
+    this.gameStarted = false;
+    this.elevenAccept = [];
+    this.waiting = true;
+    this.team1.map((player) => {player.ready = false})
+    this.team2.map((player) => {player.ready = false})
+    if (this.score.team1 > this.score.team2) {
+      this.winner = `Vencedores: ${this.team1[0].name} e ${this.team1[1].name}`;
+    } else if (this.score.team2 > this.score.team1) {
+      this.winner = `Vencedores: ${this.team2[0].name} e ${this.team2[1].name}`;
+    }
+
   }
 
   async truco(playerId: string, accepted: boolean) {
@@ -498,7 +529,10 @@ export class TrucoTable {
       playedCards: this.playedCards,
       lastTruco: this.currentTruco,
       createdBy: this.createdBy,
-      gameStarted: this.gameStarted
+      gameStarted: this.gameStarted,
+      gameFinished: this.gameFinished,
+      elevenHand: this.elevenHand,
+      winner: this.winner,
     };
   }
 
