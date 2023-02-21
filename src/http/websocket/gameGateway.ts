@@ -311,11 +311,12 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       roomId: string;
       playerId: string;
       card: TrucoCard;
+      hidden: boolean;
     },
   ) {
     if (gameExists(body.roomId) && !rooms[body.roomId].waiting) {
       if (rooms[body.roomId].playedCards.length !== rooms[body.roomId].numberOfPlayers()) {
-        await rooms[body.roomId].playCard(body.card, body.playerId);
+        await rooms[body.roomId].playCard(body.card, body.playerId, body.hidden);
         this.updateRoom(body.roomId);
       }
       if (rooms[body.roomId].playedCards.length === rooms[body.roomId].numberOfPlayers()) {

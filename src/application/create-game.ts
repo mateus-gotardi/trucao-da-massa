@@ -178,7 +178,7 @@ export class TrucoTable {
     this.manilha = valuesOrder[valuesOrder.indexOf(this.vira.value) + 1];
   }
 
-  async playCard(card: TrucoCard, playerId: string) {
+  async playCard(card: TrucoCard, playerId: string, hidden: boolean) {
     console.log(
       'player: ' +
       playerId +
@@ -196,7 +196,8 @@ export class TrucoTable {
         for (let i = 0; i < player.hand.length; i++) {
           if (player.hand[i].value === card.value && player.hand[i].suit === card.suit) {
             player.hand.splice(i, 1);
-            this.playedCards.push({ card: card, playerId: playerId });
+            if (hidden) this.playedCards.push({ card: { value: 'hidden', suit: 'hidden' }, playerId: playerId });
+            else this.playedCards.push({ card: card, playerId: playerId });
             this.switchTurn();
             break;
           }
@@ -268,7 +269,7 @@ export class TrucoTable {
       this.goldHand = true;
       this.elevenHand = false;
       this.waiting = false;
-    }else if (this.score.team1 === 11 || this.score.team2 === 11) {
+    } else if (this.score.team1 === 11 || this.score.team2 === 11) {
       this.elevenHand = true;
       this.waiting = true;
       this.elevenAccept = []
@@ -301,8 +302,8 @@ export class TrucoTable {
     this.gameStarted = false;
     this.elevenAccept = [];
     this.waiting = true;
-    this.team1.map((player) => {player.ready = false})
-    this.team2.map((player) => {player.ready = false})
+    this.team1.map((player) => { player.ready = false })
+    this.team2.map((player) => { player.ready = false })
     if (this.score.team1 > this.score.team2) {
       this.winner = `Vencedores: ${this.team1[0].name} e ${this.team1[1].name}`;
     } else if (this.score.team2 > this.score.team1) {
@@ -533,6 +534,7 @@ export class TrucoTable {
       gameFinished: this.gameFinished,
       elevenHand: this.elevenHand,
       winner: this.winner,
+      waiting: this.waiting
     };
   }
 
