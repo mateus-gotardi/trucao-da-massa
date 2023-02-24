@@ -107,19 +107,18 @@ export class TrucoTable {
     );
   }
 
-  startGame() {
+  async startGame() {
     if (this.checkReady() && this.isReadyToStart()) {
       this.dealer = this.team1[0];
       this.dealCards();
       this.score.team1 = 0;
       this.score.team2 = 0;
-      this.partialScore.team1 = 0;
-      this.partialScore.team2 = 0;
       this.turn = this.team2[0].playerId;
       this.gameStarted = true;
       this.gameFinished = false;
       this.winner = '';
       this.waiting = false;
+      await this.reDeal();
     }
 
   }
@@ -245,6 +244,9 @@ export class TrucoTable {
   }
 
   async reDeal() {
+    this.points = 1;
+    this.goldHand = false;
+    this.elevenAccept = [];
     this.currentTruco = '';
     this.playedCards = [];
     this.partialScore.team1 = 0;

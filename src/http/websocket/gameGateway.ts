@@ -205,7 +205,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('startgame')
-  onStartGame(
+  async onStartGame(
     @MessageBody()
     body: {
       roomId: string;
@@ -218,7 +218,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       rooms[body.roomId].isReadyToStart() &&
       rooms[body.roomId].createdBy === body.playerId
     ) {
-      rooms[body.roomId].startGame();
+      await rooms[body.roomId].startGame();
       this.updateRoom(body.roomId);
     }
   }
