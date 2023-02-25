@@ -46,6 +46,33 @@ const getPartner = (playerId: string, roomId: string) => {
     return rooms[roomId].team2[0].playerId;
   }
 }
+
+const isBot = (playerId: string, roomId: string) => {
+  let player = rooms[roomId].getPlayer(playerId);
+  if (player.name === "Bot" &&
+    player.name !== player.playerId) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function deleteInactiveRooms(rooms: { [key: string]: { lastUpdate: Date } }) {
+  const now = new Date();
+  for (const room in rooms) {
+    const lastUpdate = rooms[room].lastUpdate;
+    const timeDiffInMillis = now.getTime() - lastUpdate.getTime();
+    const timeDiffInMinutes = timeDiffInMillis / (1000 * 60);
+    if (timeDiffInMinutes > 15) {
+      delete rooms[room];
+      console.log(`Sala ${room} excluída por inatividade.`);
+    }
+  }
+}
+
+setInterval(() => {
+  deleteInactiveRooms(rooms);
+}, 10 * 1000 * 60);
 @WebSocketGateway()
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
@@ -61,12 +88,17 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.emit(event, data);
   }
 
-  updateRoom(roomId: string) {
-    this.server.to(roomId).emit('update', rooms[roomId].getTable());
+  async updateRoom(roomId: string) {
+    if (rooms[roomId].gameStarted &&
+      isBot(rooms[roomId].turn, roomId)) {
+      await rooms[roomId].botPlay()
+    }
     if (rooms[roomId].elevenHand && rooms[roomId].elevenAccept.length === 0) {
       let team = rooms[roomId].score.team1 === 11 ? 'team1' : 'team2';
       this.server.to(roomId).emit('handofeleven', { team: team });
     }
+    rooms[roomId].lastUpdate = new Date();
+    this.server.to(roomId).emit('update', rooms[roomId].getTable());
   }
 
   @SubscribeMessage('join')
@@ -87,7 +119,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           rooms[body.roomId].addPlayer(player, body.team);
           let table = rooms[body.roomId].getTable();
           client.join(body.roomId);
-          client.join(body.playerId);
           this.updateRoom(body.roomId);
           return { event: 'join', data: { table, player, team: `team${body.team}` } };
         } else {
@@ -118,7 +149,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       rooms[body.roomId].addPlayer(player, body.team);
       let table = rooms[body.roomId].getTable();
       client.join(body.roomId);
-      client.join(body.playerId);
       return { event: 'join', data: { table, player, team: `team${body.team}` } };
     } else {
       return { event: 'error-create', data: 'Sala já existe' };
@@ -131,11 +161,39 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     body: {
       roomId: string;
       playerId: string;
-    }
+    },
+    @ConnectedSocket() client: Socket,
   ) {
     if (gameExists(body.roomId)) {
-      rooms[body.roomId].removePlayer(body.playerId);
-      this.updateRoom(body.roomId);
+      if (rooms[body.roomId].createdBy === body.playerId && !rooms[body.roomId].gameStarted) {
+        delete rooms[body.roomId];
+        this.server.to(body.roomId).emit('closeroom', { status: true, message: `Sala fechada pelo dono ${body.playerId}` });
+      } else if (rooms[body.roomId].createdBy === body.playerId && rooms[body.roomId].gameStarted) {
+        let newOwner = getNextPlayer(body.playerId, body.roomId);
+        console.log(`removing player ${body.playerId} from room ${body.roomId}`)
+        client.leave(body.roomId);
+        client.leave(body.playerId);
+        rooms[body.roomId].removePlayer(body.playerId);
+        let count = 0;
+        while (isBot(newOwner, body.roomId) && count < 4) {
+          console.log(newOwner)
+          newOwner = getNextPlayer(newOwner, body.roomId);
+          count++;
+        }
+        if (!isBot(newOwner, body.roomId)) {
+          console.log(`new owner ${newOwner} from room ${body.roomId}`)
+          rooms[body.roomId].createdBy = newOwner;
+        } else {
+          console.log('deleting room '+ body.roomId)
+          delete rooms[body.roomId];
+        }
+      } else {
+        console.log(`removing player ${body.playerId} from room ${body.roomId}`)
+        rooms[body.roomId].removePlayer(body.playerId);
+        client.leave(body.roomId);
+        client.leave(body.playerId);
+        this.updateRoom(body.roomId);
+      }
     }
   }
 
@@ -172,7 +230,12 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('getrooms')
   onGetRooms() {
-    return { event: 'getrooms', data: Object.keys(rooms) };
+    let roomList = []
+    let keys = Object.keys(rooms)
+    keys.forEach((room) => {
+      roomList.push({ roomId: room, players: rooms[room].numberOfPlayers() })
+    })
+    return { event: 'getrooms', data: roomList };
   }
 
   @SubscribeMessage('changeteam')
@@ -235,13 +298,24 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       rooms[body.roomId].currentTruco !== body.playerId && !rooms[body.roomId].elevenHand) {
       rooms[body.roomId].waiting = true;
       let playerToAccept = getNextPlayer(body.playerId, body.roomId);
-      switch (rooms[body.roomId].getTeam(body.playerId)) {
-        case 'team1':
-          this.server.to(body.roomId).emit('acceptTruco', { team: 'team2', player: playerToAccept, asker: body.playerId });
-          break;
-        case 'team2':
-          this.server.to(body.roomId).emit('acceptTruco', { team: 'team1', player: playerToAccept, asker: body.playerId });
-          break;
+      if (isBot(playerToAccept, body.roomId)) {
+        playerToAccept = getPartner(playerToAccept, body.roomId);
+      }
+      if (isBot(playerToAccept, body.roomId)) {
+        let accept = Math.random() > 0.5 ? true : false;
+        await rooms[body.roomId].truco(body.playerId, accept);
+        rooms[body.roomId].waiting = false;
+        this.server.to(body.roomId).emit('responsetruco', { team: rooms[body.roomId].getTeam(playerToAccept), accept });
+        this.updateRoom(body.roomId);
+      } else {
+        switch (rooms[body.roomId].getTeam(body.playerId)) {
+          case 'team1':
+            this.server.to(body.roomId).emit('acceptTruco', { team: 'team2', player: playerToAccept, asker: body.playerId });
+            break;
+          case 'team2':
+            this.server.to(body.roomId).emit('acceptTruco', { team: 'team1', player: playerToAccept, asker: body.playerId });
+            break;
+        }
       }
     } else if (rooms[body.roomId].elevenHand) {
       let team = rooms[body.roomId].getTeam(body.playerId) === 'team1' ? 'team2' : 'team1';
@@ -323,10 +397,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         rooms[body.roomId].waiting = true;
         setTimeout(async () => {
           await rooms[body.roomId].endPartial();
+          rooms[body.roomId].waiting = false;
           this.updateRoom(body.roomId);
-          if (!rooms[body.roomId].elevenHand) {
-            rooms[body.roomId].waiting = false;
-          }
         }, 3000);
       }
     }
@@ -356,5 +428,47 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(body.roomId).emit('playeleven', { team: body.team, accept: body.accept });
       this.updateRoom(body.roomId);
     }
+  }
+
+  @SubscribeMessage('kickplayer')
+  onKickPlayer(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+    },
+  ) {
+    console.log(body)
+    rooms[body.roomId].removePlayer(body.playerId);
+    this.server.to(body.roomId).emit('kickplayer', { playerId: body.playerId });
+    this.updateRoom(body.roomId);
+  }
+
+  @SubscribeMessage('addbot')
+  onAddBot(
+    @MessageBody()
+    body: {
+      roomId: string;
+      team: string;
+    },
+  ) {
+    console.log(body)
+    if (gameExists(body.roomId)) {
+      rooms[body.roomId].addBot(body.team);
+      this.updateRoom(body.roomId);
+    }
+  }
+
+  @SubscribeMessage('unsubscribe')
+  onUnsubscribe(
+    @MessageBody()
+    body: {
+      roomId: string;
+      playerId: string;
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    client.leave(body.roomId);
+    client.leave(body.playerId);
   }
 }

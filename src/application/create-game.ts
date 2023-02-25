@@ -34,6 +34,7 @@ export class TrucoTable {
   winner: string;
   goldHand: boolean;
   elevenAccept: boolean[];
+  lastUpdate: Date;
 
   constructor(tableId: string, playerId: string) {
     this.tableId = tableId;
@@ -62,6 +63,7 @@ export class TrucoTable {
     this.elevenHand = false;
     this.goldHand = false;
     this.winner = '';
+    this.lastUpdate = new Date();
   }
 
 
@@ -138,24 +140,43 @@ export class TrucoTable {
     }
   }
 
+  addBot(team: 'team1' | 'team2') {
+    if (this[team].length < 2) {
+      let botId = `Bot${Math.floor(Math.random() * 1001)}`;
+      let bot = { playerId: botId, name: 'Bot', ready: true, hand: [] }
+      this[team].push(bot);
+    }
+  }
+
   removePlayer(playerId: string) {
-    switch (this.getTeam(playerId)) {
-      case 'team1':
-        this.team1 = this.team1.filter(
-          (player) => player.playerId !== playerId
-        );
-        if (this.gameStarted) {
-          this.addPlayer(new TrucoPlayer('bot', `bot${Math.floor(Math.random() * 1001)}`), 1)
-        }
-        break;
-      case 'team2':
-        this.team2 = this.team2.filter(
-          (player) => player.playerId !== playerId
-        );
-        if (this.gameStarted) {
-          this.addPlayer(new TrucoPlayer('bot', `bot${Math.floor(Math.random() * 1001)}`), 2)
-        }
-        break;
+    console.log('removing player ' + playerId)
+    if (this.gameStarted) {
+      let player = this.getPlayer(playerId);
+      player.name = 'Bot';
+      let botId = `Bot${Math.floor(Math.random() * 1001)}`
+      player.playerId = botId;
+      if (this.turn === playerId) {
+        this.turn = botId;
+      }
+      if (this.dealer.playerId === playerId) {
+        this.dealer = player;
+      }
+      if (this.playedCards.some((card) => card.playerId === playerId)) {
+        this.playedCards.find((card) => card.playerId === playerId).playerId = botId;
+      }
+    } else {
+      switch (this.getTeam(playerId)) {
+        case 'team1':
+          this.team1 = this.team1.filter(
+            (player) => player.playerId !== playerId
+          );
+          break;
+        case 'team2':
+          this.team2 = this.team2.filter(
+            (player) => player.playerId !== playerId
+          );
+          break;
+      }
     }
   }
 
@@ -197,12 +218,24 @@ export class TrucoTable {
             player.hand.splice(i, 1);
             if (hidden) this.playedCards.push({ card: { value: 'hidden', suit: 'hidden' }, playerId: playerId });
             else this.playedCards.push({ card: card, playerId: playerId });
-            this.switchTurn();
+            await this.switchTurn();
+            if (this.isBot(this.turn)) await this.botPlay()
             break;
           }
         }
       } else return 'Card not in hand';
     } else return 'Not your turn';
+  }
+
+  isBot(playerId: string) {
+    let player = this.getPlayer(playerId)
+    return player.name === 'Bot' && player.playerId !== player.name;
+  }
+
+  async botPlay() {
+    let player = this.getPlayer(this.turn);
+    let card = player.hand[0];
+    await this.playCard(card, this.turn, false);
   }
 
   async endPartial() {
@@ -279,8 +312,6 @@ export class TrucoTable {
   }
 
   async endHand(refusedTruco?: boolean) {
-    console.log('endHand')
-
     if (refusedTruco) {
       this.score[this.getTeam(this.currentTruco)] += this.points;
     } else {
@@ -344,7 +375,7 @@ export class TrucoTable {
     this.turn = playerId;
   }
 
-  switchTurn() {
+  async switchTurn() {
     if (this.numberOfPlayers() === 4) {
       switch (this.turn) {
         case this.team1[0].playerId:
