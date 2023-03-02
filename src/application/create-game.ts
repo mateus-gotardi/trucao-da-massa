@@ -219,7 +219,7 @@ export class TrucoTable {
             if (hidden) this.playedCards.push({ card: { value: 'hidden', suit: 'hidden' }, playerId: playerId });
             else this.playedCards.push({ card: card, playerId: playerId });
             await this.switchTurn();
-            if (this.isBot(this.turn)) await this.botPlay()
+            if (this.isBot(this.turn) && this.playedCards.length < 4) await this.botPlay()
             break;
           }
         }

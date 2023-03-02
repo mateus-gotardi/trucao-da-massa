@@ -57,13 +57,14 @@ const isBot = (playerId: string, roomId: string) => {
   }
 }
 
+
 function deleteInactiveRooms(rooms: { [key: string]: { lastUpdate: Date } }) {
   const now = new Date();
   for (const room in rooms) {
     const lastUpdate = rooms[room].lastUpdate;
     const timeDiffInMillis = now.getTime() - lastUpdate.getTime();
     const timeDiffInMinutes = timeDiffInMillis / (1000 * 60);
-    if (timeDiffInMinutes > 15) {
+    if (timeDiffInMinutes > 60) {
       delete rooms[room];
       console.log(`Sala ${room} excluída por inatividade.`);
     }
@@ -72,7 +73,7 @@ function deleteInactiveRooms(rooms: { [key: string]: { lastUpdate: Date } }) {
 
 setInterval(() => {
   deleteInactiveRooms(rooms);
-}, 10 * 1000 * 60);
+}, 45 * 1000 * 60);
 @WebSocketGateway()
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
@@ -90,7 +91,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async updateRoom(roomId: string) {
     if (rooms[roomId].gameStarted &&
-      isBot(rooms[roomId].turn, roomId)) {
+      isBot(rooms[roomId].turn, roomId) &&
+      rooms[roomId].playedCards.length < 4) {
       await rooms[roomId].botPlay()
     }
     if (rooms[roomId].elevenHand && rooms[roomId].elevenAccept.length === 0) {
@@ -184,7 +186,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           console.log(`new owner ${newOwner} from room ${body.roomId}`)
           rooms[body.roomId].createdBy = newOwner;
         } else {
-          console.log('deleting room '+ body.roomId)
+          console.log('deleting room ' + body.roomId)
           delete rooms[body.roomId];
         }
       } else {
@@ -217,6 +219,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         let room = rooms[body.roomId];
         let table = room.getTable();
         let player = room.getPlayer(body.playerId);
+        let team = room.getTeam(body.playerId);
+        player.team = team;
         client.join(body.roomId);
         this.server
           .to(client.id)
@@ -396,9 +400,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (rooms[body.roomId].playedCards.length === rooms[body.roomId].numberOfPlayers()) {
         rooms[body.roomId].waiting = true;
         setTimeout(async () => {
-          await rooms[body.roomId].endPartial();
-          rooms[body.roomId].waiting = false;
-          this.updateRoom(body.roomId);
+          if (gameExists(body.roomId)) {
+            await rooms[body.roomId].endPartial();
+            rooms[body.roomId].waiting = false;
+            this.updateRoom(body.roomId);
+          }
         }, 3000);
       }
     }
@@ -438,7 +444,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       playerId: string;
     },
   ) {
-    console.log(body)
+    console.log("kicking player", body)
     rooms[body.roomId].removePlayer(body.playerId);
     this.server.to(body.roomId).emit('kickplayer', { playerId: body.playerId });
     this.updateRoom(body.roomId);
@@ -452,7 +458,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       team: string;
     },
   ) {
-    console.log(body)
+    console.log('adding bot on team', body.team, 'to room', body.roomId)
     if (gameExists(body.roomId)) {
       rooms[body.roomId].addBot(body.team);
       this.updateRoom(body.roomId);
