@@ -35,6 +35,7 @@ export class TrucoTable {
   goldHand: boolean;
   elevenAccept: boolean[];
   lastUpdate: Date;
+  orangeTruck: 'team1' | 'team2' | '';
 
   constructor(tableId: string, playerId: string) {
     this.tableId = tableId;
@@ -64,6 +65,7 @@ export class TrucoTable {
     this.goldHand = false;
     this.winner = '';
     this.lastUpdate = new Date();
+    this.orangeTruck = '';
   }
 
 
@@ -240,6 +242,9 @@ export class TrucoTable {
 
   async endPartial() {
     let winner = this.getWinner();
+    if (this.team1[0].hand.length === 2 && this.team2[0].hand.length === 2 && this.team1[1].hand.length === 2 && this.team2[1].hand.length === 2) {
+      this.orangeTruck = this.getTeam(winner.playerId);
+    }
     this.playedCards = [];
     if (winner.playerId === 'draw') {
       this.partialScore.team1 += 1;
@@ -284,6 +289,7 @@ export class TrucoTable {
     this.playedCards = [];
     this.partialScore.team1 = 0;
     this.partialScore.team2 = 0;
+    this.orangeTruck = '';
     this.switchDealer();
     this.turn = this.dealer.playerId;
     this.switchTurn();
@@ -319,6 +325,8 @@ export class TrucoTable {
         this.score.team1 += this.points;
       } else if (this.partialScore.team2 > this.partialScore.team1) {
         this.score.team2 += this.points;
+      } else if(this.partialScore.team1 === this.partialScore.team2) {
+        this.score[this.orangeTruck] += this.points;
       }
     }
     if (this.score.team1 >= 12 || this.score.team2 >= 12) {

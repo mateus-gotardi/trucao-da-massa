@@ -97,7 +97,38 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     if (rooms[roomId].elevenHand && rooms[roomId].elevenAccept.length === 0) {
       let team = rooms[roomId].score.team1 === 11 ? 'team1' : 'team2';
-      this.server.to(roomId).emit('handofeleven', { team: team });
+      if (isBot(rooms[roomId][team][0].playerId, roomId) || isBot(rooms[roomId][team][1].playerId, roomId)) {
+        rooms[roomId][team].map((player: TrucoPlayer) => {
+          if (isBot(player.playerId, roomId)) {
+            let accept = Math.random() >= 0.65;
+            if (accept) {
+              rooms[roomId].elevenAccept.push(true);
+            } else {
+              rooms[roomId].elevenAccept.push(false);
+            }
+          }
+        })
+      }
+      if (rooms[roomId].elevenAccept.length === 2 || rooms[roomId].elevenAccept.includes(true)) {
+        if (rooms[roomId].elevenAccept.includes(true)) {
+          rooms[roomId].points = 3;
+          rooms[roomId].waiting = false;
+          this.server.to(roomId).emit('playelevenres', { message: "Mão de onze aceita" });
+          this.updateRoom(roomId);
+          return
+        } else if (rooms[roomId].elevenAccept.length < 2) {
+          this.server.to(roomId).emit('handofeleven', { team: team });
+        } else {
+          let WinTeam = team === 'team1' ? 'team2' : 'team1';
+          rooms[roomId].score[WinTeam] += 1;
+          await rooms[roomId].reDeal();
+          this.server.to(roomId).emit('playelevenres', { message: "Mão de onze recusada" });
+          this.updateRoom(roomId);
+          return
+        }
+      } else {
+        this.server.to(roomId).emit('handofeleven', { team: team });
+      }
     }
     rooms[roomId].lastUpdate = new Date();
     this.server.to(roomId).emit('update', rooms[roomId].getTable());
