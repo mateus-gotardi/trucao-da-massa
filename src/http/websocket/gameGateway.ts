@@ -569,4 +569,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.leave(body.roomId);
     client.leave(body.playerId);
   }
+
+  @SubscribeMessage('teste')
+  onTeste() {
+    console.log('teste')
+    this.server.emit('teste', { message: 'teste' });
+  }
+  
 }
