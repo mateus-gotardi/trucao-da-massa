@@ -325,7 +325,7 @@ export class TrucoTable {
         this.score.team1 += this.points;
       } else if (this.partialScore.team2 > this.partialScore.team1) {
         this.score.team2 += this.points;
-      } else if(this.partialScore.team1 === this.partialScore.team2) {
+      } else if (this.partialScore.team1 === this.partialScore.team2) {
         this.score[this.orangeTruck] += this.points;
       }
     }
@@ -343,8 +343,16 @@ export class TrucoTable {
     this.gameStarted = false;
     this.elevenAccept = [];
     this.waiting = true;
-    this.team1.map((player) => { player.ready = false })
-    this.team2.map((player) => { player.ready = false })
+    this.team1.map((player) => {
+      if (!this.isBot(player.playerId)) {
+        player.ready = false
+      }
+    })
+    this.team2.map((player) => {
+      if (!this.isBot(player.playerId)) {
+        player.ready = false
+      }
+    })
     if (this.score.team1 > this.score.team2) {
       this.winner = `Vencedores: ${this.team1[0].name} e ${this.team1[1].name}`;
     } else if (this.score.team2 > this.score.team1) {
@@ -499,7 +507,7 @@ export class TrucoTable {
           winner = c;
         }
       } else if (winner.card.value !== this.manilha) {
-        if (winner.card.value == c.card.value) {
+        if (winner.card.value == c.card.value && this.getTeam(winner.playerId) !== this.getTeam(c.playerId)) {
           winner.playerId = 'draw';
         } else if (
           valuesOrder.indexOf(c.card.value) >

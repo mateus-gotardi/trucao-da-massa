@@ -74,6 +74,30 @@ function deleteInactiveRooms(rooms: { [key: string]: { lastUpdate: Date } }) {
 setInterval(() => {
   deleteInactiveRooms(rooms);
 }, 45 * 1000 * 60);
+
+let hasToUpdate = false;
+let timerId: ReturnType<typeof setTimeout>;
+
+function startTimer(timeInMS: number, roomId: string) {
+  if(rooms[roomId].gameStarted === false) return;
+  console.log('timer started')
+  timerId = setTimeout(function () {
+    const player = rooms[roomId].getPlayer(rooms[roomId].turn);
+    if (rooms[roomId].playedCards.length < 4 && player.hand[0]) {
+      rooms[roomId].playCard(player.hand[0], player.playerId, false);
+      hasToUpdate = true;
+      setTimeout(() => {
+        hasToUpdate = false;
+      }, 1000);
+    }
+  }, timeInMS);
+}
+
+function cancelTimer() {
+  console.log('timer canceled')
+  clearTimeout(timerId);
+}
+
 @WebSocketGateway()
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
@@ -90,11 +114,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   async updateRoom(roomId: string) {
+    //verify if its a bot turn
     if (rooms[roomId].gameStarted &&
       isBot(rooms[roomId].turn, roomId) &&
       rooms[roomId].playedCards.length < 4) {
-      await rooms[roomId].botPlay()
+      await rooms[roomId].botPlay();
+      this.endPartialHand(roomId);
     }
+    //verify if its eleven hand and if its a bot turn
     if (rooms[roomId].elevenHand && rooms[roomId].elevenAccept.length === 0) {
       let team = rooms[roomId].score.team1 === 11 ? 'team1' : 'team2';
       if (isBot(rooms[roomId][team][0].playerId, roomId) || isBot(rooms[roomId][team][1].playerId, roomId)) {
@@ -130,8 +157,46 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.server.to(roomId).emit('handofeleven', { team: team });
       }
     }
-    rooms[roomId].lastUpdate = new Date();
+    if (!rooms[roomId].waiting && !isBot(rooms[roomId].turn, roomId)) {
+      this.timer(roomId);
+    }
     this.server.to(roomId).emit('update', rooms[roomId].getTable());
+    if (rooms[roomId].gameFinished) {
+      rooms[roomId].gameFinished = false
+    }
+  }
+
+  timer(roomId: string) {
+    let time = 10000;
+    if (rooms[roomId].gameStarted) {
+      startTimer(time, roomId);
+      setTimeout(() => {
+        if (hasToUpdate) {
+          this.updateRoom(roomId);
+          this.endPartialHand(roomId);
+        }
+      }, time+10);
+    }
+  }
+
+  stopTimer() {
+    cancelTimer();
+  }
+
+  endPartialHand(roomId: string) {
+    if (rooms[roomId].playedCards.length === rooms[roomId].numberOfPlayers()) {
+      console.log('end partial')
+      rooms[roomId].waiting = true;
+      this.stopTimer()
+      setTimeout(async () => {
+        console.log('updating end partial')
+        if (gameExists(roomId)) {
+          await rooms[roomId].endPartial();
+          rooms[roomId].waiting = false;
+          this.updateRoom(roomId);
+        }
+      }, 3000);
+    }
   }
 
   @SubscribeMessage('join')
@@ -424,20 +489,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     },
   ) {
     if (gameExists(body.roomId) && !rooms[body.roomId].waiting) {
+      rooms[body.roomId].lastUpdate = new Date();
       if (rooms[body.roomId].playedCards.length !== rooms[body.roomId].numberOfPlayers()) {
         await rooms[body.roomId].playCard(body.card, body.playerId, body.hidden);
+        this.stopTimer()
         this.updateRoom(body.roomId);
+
       }
-      if (rooms[body.roomId].playedCards.length === rooms[body.roomId].numberOfPlayers()) {
-        rooms[body.roomId].waiting = true;
-        setTimeout(async () => {
-          if (gameExists(body.roomId)) {
-            await rooms[body.roomId].endPartial();
-            rooms[body.roomId].waiting = false;
-            this.updateRoom(body.roomId);
-          }
-        }, 3000);
-      }
+      this.endPartialHand(body.roomId);
     }
   }
 
