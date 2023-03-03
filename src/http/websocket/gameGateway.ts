@@ -49,8 +49,8 @@ const getPartner = (playerId: string, roomId: string) => {
 
 const isBot = (playerId: string, roomId: string) => {
   let player = rooms[roomId].getPlayer(playerId);
-  if (player.name === "Bot" &&
-    player.name !== player.playerId) {
+  if (rooms[roomId].gameStarted && player?.name === "Bot" &&
+    player?.name !== player.playerId) {
     return true;
   } else {
     return false;
@@ -79,18 +79,20 @@ let hasToUpdate = false;
 let timerId: ReturnType<typeof setTimeout>;
 
 function startTimer(timeInMS: number, roomId: string) {
-  if(rooms[roomId].gameStarted === false) return;
-  console.log('timer started')
-  timerId = setTimeout(function () {
-    const player = rooms[roomId].getPlayer(rooms[roomId].turn);
-    if (rooms[roomId].playedCards.length < 4 && player.hand[0]) {
-      rooms[roomId].playCard(player.hand[0], player.playerId, false);
-      hasToUpdate = true;
-      setTimeout(() => {
-        hasToUpdate = false;
-      }, 1000);
-    }
-  }, timeInMS);
+  if (rooms[roomId].gameStarted === false) return;
+  if (gameExists(roomId)) {
+    console.log('timer started')
+    timerId = setTimeout(function () {
+      const player = rooms[roomId].getPlayer(rooms[roomId].turn);
+      if (rooms[roomId].playedCards.length < 4 && player.hand[0]) {
+        rooms[roomId].playCard(player.hand[0], player.playerId, false);
+        hasToUpdate = true;
+        setTimeout(() => {
+          hasToUpdate = false;
+        }, 1000);
+      }
+    }, timeInMS);
+  }
 }
 
 function cancelTimer() {
@@ -167,7 +169,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   timer(roomId: string) {
-    let time = 10000;
+    let time = 25000;
     if (rooms[roomId].gameStarted) {
       startTimer(time, roomId);
       setTimeout(() => {
@@ -175,7 +177,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           this.updateRoom(roomId);
           this.endPartialHand(roomId);
         }
-      }, time+10);
+      }, time + 10);
     }
   }
 
