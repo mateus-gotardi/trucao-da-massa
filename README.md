@@ -1,4 +1,4 @@
-# Truco online Front-End
+# Truco online Back-End
 
 
 ![GitHub repo size](https://img.shields.io/github/repo-size/mateus-gotardi/trucao-da-massa?style=for-the-badge)
